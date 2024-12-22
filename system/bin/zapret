@@ -1,0 +1,49 @@
+#!/system/bin/sh
+restart_zapret() {
+    echo "Stopping zapret..."
+    iptables -t mangle -F PREROUTING
+    iptables -t mangle -F POSTROUTING
+    kill "$(pidof nfqws)" 2>/dev/null
+
+    echo "Starting zapret..."
+    check_iptables_support() {
+        if iptables -t mangle -A POSTROUTING -p tcp -m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:12 -j ACCEPT 2>/dev/null; then
+            iptables -t mangle -D POSTROUTING -p tcp -m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:12 -j ACCEPT 2>/dev/null
+            echo "2"
+        else
+            echo "3"
+        fi
+    }
+
+    use_iptables=$(check_iptables_support)
+    hostlist="--hostlist=/etc/list-all.txt"
+    config="--filter-tcp=80 --dpi-desync=fake,split2 --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig $hostlist --new"
+    config="$config --filter-tcp=443 --hostlist=/etc/list-all.txt --dpi-desync=fake,split2 --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls=/etc/tls_clienthello_www_google_com.bin --new"
+    config="$config --filter-tcp=80,443 --dpi-desync=fake,disorder2 --dpi-desync-repeats=6 --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig $hostlist --new"
+    config="$config --filter-udp=50000-50099 --dpi-desync=fake --dpi-desync-any-protocol --dpi-desync-fake-quic=0xC30000000108 --new"
+    config="$config --filter-udp=443 --hostlist=/etc/list-all.txt --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=/etc/quic_initial_www_google_com.bin --new"
+    config="$config --filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=11 $hostlist"
+
+    sysctl net.netfilter.nf_conntrack_tcp_be_liberal=1 > /dev/null
+
+    iptAdd() {
+        local proto=$1 port=$2
+        iptables -t mangle -I POSTROUTING -p $proto --dport $port -j NFQUEUE --queue-num 200 --queue-bypass
+        iptables -t mangle -I PREROUTING -p $proto --sport $port -j NFQUEUE --queue-num 200 --queue-bypass
+    }
+
+    for port in 80 443; do iptAdd "tcp" "$port"; done
+    for port in 50000 50001 50002 50003 50004 50005 50006 50007 50008 50009 50010 50011 50012 50013 50014 50015 50016 50017 50018 50019 50020 50021 50022 50023 50024 50025 50026 50027 50028 50029 50030 50031 50032 50033 50034 50035 50036 50037 50038 50039 50040 50041 50042 50043 50044 50045 50046 50047 50048 50049 50050 50051 50052 50053 50054 50055 50056 50057 50058 50059 50060 50061 50062 50063 50064 50065 50066 50067 50068 50069 50070 50071 50072 50073 50074 50075 50076 50077 50078 50079 50080 50081 50082 50083 50084 50085 50086 50087 50088 50089 50090 50091 50092 50093 50094 50095 50096 50097 50098 50099; do
+        iptAdd "udp" "$port"
+    done
+
+    nfqws --uid=0:0 --qnum=200 $config > /dev/null &
+    echo "zapret service restarted!"
+}
+
+if [ "$1" == "restart" ]; then
+    restart_zapret
+else
+    echo "
+Use zapret restart to restart service"
+fi
